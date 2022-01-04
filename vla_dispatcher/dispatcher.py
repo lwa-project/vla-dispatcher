@@ -18,12 +18,12 @@ Still to do;
  3. Correct triggering; only trigger at first scan of SB?
 """
 
-
-import datetime
 import os
-import asyncore
+import json
+import time
 import logging
-from time import gmtime,strftime
+import asyncore
+import datetime
 from optparse import OptionParser
 from collections import namedtuple
 
@@ -92,10 +92,10 @@ class FRBController(object):
                 eventDec = -1
                 eventDur = -1
                 eventIntent = config.scan_intent
-                eventID = int(strftime("%y%m%d%H%M",gmtime()))
+                eventID = int(time.strftime("%y%m%d%H%M", time.gmtime()))
                 do_dispatch = True
-
-            elif config.source == "FINISH" and last_scan[config.projectID].source == "FINISH":
+                
+            elif config.source == "FINISH":
                 logger.info("*** Project %s has finished (source=%s)" % (config.projectID,
                                                                          config.source))
                 eventType = 'ELWA_DONE'
@@ -104,7 +104,7 @@ class FRBController(object):
                 eventDec = -1
                 eventDur = -1
                 eventIntent = config.scan_intent
-                eventID = int(strftime("%y%m%d%H%M",gmtime()))
+                eventID = int(time.strftime("%y%m%d%H%M", time.gmtime()))
                 do_dispatch = True
                 
             else:
@@ -132,6 +132,16 @@ class FRBController(object):
                 logger.info("Dispatching READY command for obs serial# %s." % eventID)
             with open(cmdfile, 'w') as fh:
                 fh.write("%s %i %f %f %f %f" % (eventType, eventID, eventTime, eventRA, eventDec, eventDur))
+            with open('incoming.json', 'wb') as fh:
+                json.dump({'type':    eventType,
+                           'id':      eventID,
+                           'project': config.projectID,
+                           'scan':    config.scan,
+                           'intent':  eventIntent,
+                           'source':  config.source,
+                           'ra':      eventRA,
+                           'dec':     eventDec,
+                           'dur':     eventDur}, fh)
             logger.info("Done, wrote %i bytes.\n" % os.path.getsize(cmdfile))
             
         # add or update last scan
@@ -139,7 +149,7 @@ class FRBController(object):
         eventRA   = config.ra_deg
         eventDec  = config.dec_deg
         eventIntent = config.scan_intent
-        eventID = int(strftime("%y%m%d%H%M", gmtime()))
+        eventID = int(time.strftime("%y%m%d%H%M", time.gmtime()))
         eventSource = config.source
         last_scan[config.projectID] = ScanInfo(time=eventTime,
                                                ra=eventRA, dec=eventDec,
