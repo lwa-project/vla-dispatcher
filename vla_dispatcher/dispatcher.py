@@ -48,11 +48,12 @@ class FRBController(object):
     notable scans.
     """
     
-    def __init__(self, intent='', project='', dispatch=False, verbose=False):
+    def __init__(self, intent='', project='', dispatch=False, command_file='incoming.json', verbose=False):
         # Mode can be project, intent
         self.intent = intent
         self.project = project
         self.dispatch = dispatch
+        self.command_file = command_file
         self.verbose = verbose
         
     def add_obsdoc(self, obsdoc):
@@ -83,6 +84,18 @@ class FRBController(object):
                                                                              eventDec))
                     else:
                         logger.info("Duration: %s" % eventDur)
+                        
+                elif config.source == "FINISH":
+                    logger.info("*** Project %s has finished (source=%s)" % (config.projectID,
+                                                                             config.source))
+                    eventType = 'ELWA_DONE'
+                    eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
+                    eventRA = -1
+                    eventDec = -1
+                    eventDur = -1
+                    eventIntent = config.scan_intent
+                    eventID = int(time.strftime("%y%m%d%H%M", time.gmtime()))
+                    do_dispatch = True
                     
             elif config.scan == 1:
                 logger.info("*** First scan %d (%s, %s)." % (config.scan, config.scan_intent, config.projectID))
@@ -119,20 +132,17 @@ class FRBController(object):
             
         if self.dispatch and do_dispatch:
             # Wait until last command disappears (i.e. cmd file is deleted by server)
-            cmdfile = 'incoming.cmd'
-            if os.path.exists(cmdfile):
+            if os.path.exists(self.command_file):
                 logger.info("Waiting for cmd queue to clear...")
-            while os.path.exists(cmdfile):
+            while os.path.exists(self.command_file):
                 time.sleep(1)
                 
             # Enqueue command
             if eventDur > 0:
                 logger.info("Dispatching SESSION command for obs serial# %s." % eventID)
             else:
-                logger.info("Dispatching READY command for obs serial# %s." % eventID)
-            with open(cmdfile, 'w') as fh:
-                fh.write("%s %i %f %f %f %f" % (eventType, eventID, eventTime, eventRA, eventDec, eventDur))
-            with open('incoming.json', 'wb') as fh:
+                logger.info("Dispatching READY/DONE command for obs serial# %s." % eventID)
+            with open(self.command_file, 'wb') as fh:
                 json.dump({'notice_type':    eventType,
                            'event_id':       eventID,
                            'project_id':     config.projectID,
@@ -143,7 +153,7 @@ class FRBController(object):
                            'event_ra':       eventRA,
                            'event_dec':      eventDec,
                            'event_duration': eventDur}, fh)
-            logger.info("Done, wrote %i bytes.\n" % os.path.getsize(cmdfile))
+            logger.info("Done, wrote %i bytes.\n" % os.path.getsize(self.command_file))
             
         # add or update last scan
         eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
@@ -174,7 +184,7 @@ class FRBController(object):
                                                                                                       str(mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET))))
             
 
-def monitor(intent, project, dispatch, verbose):
+def monitor(intent, project, dispatch, command_file, verbose):
     """
     Monitor of mcaf observation files.
     Scans that match intent and project are searched (unless --dispatch).
@@ -200,7 +210,8 @@ def monitor(intent, project, dispatch, verbose):
     logger.info('* * * * * * * * * * * * * * * * * * * * *\n')
     
     # This starts the receiving/handling loop
-    controller = FRBController(intent=intent, project=project, dispatch=dispatch, verbose=verbose)
+    controller = FRBController(intent=intent, project=project, dispatch=dispatch,
+                               command_file=command_file, verbose=verbose)
     obsdoc_client = mcaf_library.ObsdocClient(controller)
     try:
         asyncore.loop()
@@ -220,8 +231,10 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--project', type=str, default='',
                         help='Trigger on what project substring?')
     parser.add_argument('-d', '--dispatch', action='store_true',
-                        help='Actually run dispatcher; don't just listen to multicast') 
+                        help="Actually run dispatcher; don't just listen to multicast") 
+    parser.add_argument('-c', '--command-file', type=str, default='incoming.json',
+                        help='filename to write commands to')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='verbose output')
     args = parser.parse_args()
-    monitor(args.intent, args.project, args.dispatch, args.verbose)
+    monitor(args.intent, args.project, args.dispatch, args.command_file, args.verbose)
