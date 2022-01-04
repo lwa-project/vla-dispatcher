@@ -59,13 +59,13 @@ class FRBController(object):
         config = mcaf_library.MCAST_Config(obsdoc=obsdoc)
 
         # Add last entry
+        do_dispatch = False
         if self.project == '' or self.project in config.projectID:
             try:
                 logger.info(last_scan[config.projectID])
             except KeyError:
                 logger.info(config.projectID)
                 
-            do_dispatch = False
             # check that we have already scan information in last_scan
             if config.projectID in list(last_scan.keys()):
                 if self.intent in last_scan[config.projectID].intent:
@@ -83,7 +83,7 @@ class FRBController(object):
                                                                              eventDec))
                     else:
                         logger.info("Duration: %s" % eventDur)
-                        
+                    
             elif config.scan == 1:
                 logger.info("*** First scan %d (%s, %s)." % (config.scan, config.scan_intent, config.projectID))
                 eventType = 'ELWA_READY'
@@ -133,15 +133,16 @@ class FRBController(object):
             with open(cmdfile, 'w') as fh:
                 fh.write("%s %i %f %f %f %f" % (eventType, eventID, eventTime, eventRA, eventDec, eventDur))
             with open('incoming.json', 'wb') as fh:
-                json.dump({'type':    eventType,
-                           'id':      eventID,
-                           'project': config.projectID,
-                           'scan':    config.scan,
-                           'intent':  eventIntent,
-                           'source':  config.source,
-                           'ra':      eventRA,
-                           'dec':     eventDec,
-                           'dur':     eventDur}, fh)
+                json.dump({'notice_type':    eventType,
+                           'event_id':       eventID,
+                           'project_id':     config.projectID,
+                           'scan_id':        config.scan,
+                           'scan_intent':    eventIntent,
+                           'event_t':        eventTime,
+                           'event_source':   config.source,
+                           'event_ra':       eventRA,
+                           'event_dec':      eventDec,
+                           'event_duration': eventDur}, fh)
             logger.info("Done, wrote %i bytes.\n" % os.path.getsize(cmdfile))
             
         # add or update last scan
