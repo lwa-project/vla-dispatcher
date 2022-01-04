@@ -9,6 +9,7 @@
 #
 # Sarah Burke Spolaor Sep 2015
 # modified Frank Schinzel Jan 05 2017 to adapt for LWA-VLA
+# updated to save commands to a JSON file Jayce Dowell Jan 04 2022
 #
 #
 """
