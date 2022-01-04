@@ -33,9 +33,10 @@ import mcaf_library
 
 # GLOBAL VARIABLES
 workdir = os.getcwd() # assuming we start in workdir
-dispatched = {};      # Keep global list of dispatched commands
-last_scan = {};
+dispatched = {}       # Keep global list of dispatched commands
+last_scan = {}
 MJD_OFFSET = 2400000.5 # Offset in days between standard Julian day and MJD
+
 
 class FRBController(object):
     """Listens for OBS packets and tells FRB processing about any
@@ -51,88 +52,84 @@ class FRBController(object):
     def add_obsdoc(self, obsdoc):
         config = mcaf_library.MCAST_Config(obsdoc=obsdoc)
 
-	# Add last entry
-	if (self.project in config.projectID or self.project is ""):
+        # Add last entry
+        if self.project == '' or self.project == config.projectID:
+            try:
+                logger.info(last_scan[config.projectID])
+            except:
+                logger.info(config.projectID)
+                
+            do_dispatch = False
+            # check that we have already scan information in last_scan
+            if (config.projectID in list(last_scan.keys())):
+                if self.intent in last_scan[config.projectID][3]:
+                    eventType = 'ELWA_SESSION'
+                    eventTime = last_scan[config.projectID][0]
+                    eventRA   = last_scan[config.projectID][1]
+                    eventDec  = last_scan[config.projectID][2]
+                    eventDur  = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET) - eventTime  - 30.0 # subtract expected delay 
+                    eventIntent = last_scan[config.projectID][3]
+                    eventSN   = last_scan[config.projectID][4]
+                    if eventDur>=0:
+                        do_dispatch = True
+                        logger.info("Will dispatch %s for position %s %s" % (config.projectID,eventRA,eventDec))
+                    else:
+                        logger.info("Duration: %s" % eventDur)
+                        
+            elif config.scan == 1:
+                logger.info("*** First scan %d (%s, %s)." % (config.scan, config.scan_intent,config.projectID))
+                eventType = 'ELWA_READY'
+                eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
+                eventRA = -1
+                eventDec = -1
+                eventDur = -1
+                eventIntent = config.scan_intent
+                eventSN = int(strftime("%y%m%d%H%M",gmtime()))
+                do_dispatch = True
 
-	  try:
-	    logger.info(last_scan[config.projectID])
-	  except:
-	    logger.info(config.projectID)
+            elif config.source in "FINISH" and last_scan[config.projectID][5] in "FINISH":
+                logger.info("*** Project %s has finished (source=%s)" % (config.projectID,config.source))
 
-	  do_dispatch = False
-	  # check that we have already scan information in last_scan
-	  if (config.projectID in list(last_scan.keys())):
-	    if self.intent in last_scan[config.projectID][3]:
-	      eventType = 'ELWA_SESSION'
-	      eventTime = last_scan[config.projectID][0]
-	      eventRA   = last_scan[config.projectID][1]
-	      eventDec  = last_scan[config.projectID][2]
-	      eventDur  = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET) - eventTime  - 30.0 # subtract expected delay 
-	      eventIntent = last_scan[config.projectID][3]
-	      eventSN   = last_scan[config.projectID][4]
-	      if eventDur>=0:
-		do_dispatch = True
-                logger.info("Will dispatch %s for position %s %s" % (config.projectID,eventRA,eventDec))
-	      else:
-		logger.info("Duration: %s" % eventDur)
+            else:
+                logger.info("*** Skipping scan no intent match: %d (%s, %s)!" % (config.scan, config.scan_intent,config.projectID))
+              
 
-	    elif config.scan==1:
-	      logger.info("*** First scan %d (%s, %s)." % (config.scan, config.scan_intent,config.projectID))
-	      eventType = 'ELWA_READY'
-	      eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
-	      eventRA = -1
-	      eventDec = -1
-	      eventDur = -1
-	      eventIntent = config.scan_intent
-	      eventSN = int(strftime("%y%m%d%H%M",gmtime()))
-	      do_dispatch = True
+        else:
+            logger.info("*** Skipping scan no project match: %d (%s, %s)." % (config.scan, config.scan_intent,config.projectID))
+            
+        if self.dispatch and do_dispatch:
+            # Wait until last command disappears (i.e. cmd file is deleted by server)
+            cmdfile = 'incoming.cmd'
+            if os.path.exists(cmdfile):
+                logger.info("Waiting for cmd queue to clear...")
+            while os.path.exists(cmdfile):
+                time.sleep(1)
+                
+            # Enqueue command
+            if eventDur > 0:
+                logger.info("Dispatching SESSION command for obs serial# %s." % eventSN)
+            else:
+                logger.info("Dispatching READY command for obs serial# %s." % eventSN)
+            with open(cmdfile, 'w') as fh:
+                fh.write("%s %i %f %f %f %f" % (eventType, eventSN, eventTime, eventRA, eventDec, eventDur))
+            logger.info("Done, wrote %i bytes.\n" % os.path.getsize(cmdfile))
+            
+        # add or update last scan
+        eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
+        eventRA   = config.ra_deg
+        eventDec  = config.dec_deg
+        eventIntent = config.scan_intent
+        eventSN = int(strftime("%y%m%d%H%M", gmtime()))
+        eventSource = config.source
+        last_scan[config.projectID] = (eventTime, eventRA, eventDec, eventIntent, eventSN, eventSource)
 
-	    elif config.source in "FINISH" and last_scan[config.projectID][5] in "FINISH":
-	      logger.info("*** Project %s has finished (source=%s)" % (config.projectID,config.source))
-
-	    else:
-	      logger.info("*** Skipping scan no intent match: %d (%s, %s)!" % (config.scan, config.scan_intent,config.projectID))
-	      
-
-	  else:
-	    logger.info("*** Skipping scan no project match: %d (%s, %s)." % (config.scan, config.scan_intent,config.projectID))
-	    
-
-	  if self.dispatch and do_dispatch:
-	    # Wait until last command disappears (i.e. cmd file is deleted by server)
-	    cmdfile = 'incoming.cmd'
-	    if os.path.exists(cmdfile):
-	      logger.info("Waiting for cmd queue to clear...")
-	    while os.path.exists(cmdfile):
-	      time.sleep(1)
-
-	      # Enqueue command
-	    if (eventDur>0):
-		logger.info("Dispatching SESSION command for obs serial# %s." % eventSN)
-	    else:
-		logger.info("Dispatching READY command for obs serial# %s." % eventSN)
-	    fh = open(cmdfile,'w')
-	    fh.write("%s %i %f %f %f %f" % (eventType, eventSN, eventTime, eventRA, eventDec, eventDur))
-	    fh.close()
-	    logger.info("Done, wrote %i bytes.\n" % os.path.getsize(cmdfile))
-
-	  # add or update last scan
-	  eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
-	  eventRA   = config.ra_deg
-	  eventDec  = config.dec_deg
-	  eventIntent = config.scan_intent
-	  eventSN = int(strftime("%y%m%d%H%M",gmtime()))
-	  eventSource = config.source
-	  last_scan[config.projectID] = (eventTime,eventRA,eventDec,eventIntent,eventSN,eventSource)
-
-          if config.source in "FINISH":
-            logger.info("*** Project %s finish scan (source=%s)" % (config.projectID,config.source))
+        if config.source == "FINISH":
+            logger.info("*** Project %s finish scan (source=%s)" % (config.projectID, config.source))
             # Remove last_scan information when observation finishes
             del last_scan[config.projectID]
-          else:
+        else:
             logger.info("*** Scan %d (%s) contains desired project (%s=%s)." % (config.scan, config.scan_intent, config.projectID, self.project))
             logger.info("*** Position of source %s is (%s , %s) and start time (%s; unixtime %s)." % (config.source,config.ra_str,config.dec_str,str(config.startTime),str(mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET))))
-
             
 
 def monitor(intent, project, dispatch, verbose):
@@ -146,7 +143,7 @@ def monitor(intent, project, dispatch, verbose):
         logger.setLevel(logging.DEBUG)
     else:
         logger.setLevel(logging.INFO)
-
+        
     # Report start-up information
     logger.info('* * * * * * * * * * * * * * * * * * * * *')
     logger.info('* * * VLA Dispatcher is now running * * *')
@@ -158,7 +155,7 @@ def monitor(intent, project, dispatch, verbose):
     else:
         logger.info('*   Running in listening mode. Will not dispatch obs commands.')
     logger.info('* * * * * * * * * * * * * * * * * * * * *\n')
-
+    
     # This starts the receiving/handling loop
     controller = FRBController(intent=intent, project=project, dispatch=dispatch, verbose=verbose)
     obsdoc_client = mcaf_library.ObsdocClient(controller)
@@ -195,5 +192,5 @@ if __name__ == '__main__':
         action="store_true", default=False,
         help="[False] Verbose output")
     (opt,args) = cmdline.parse_args()
-
+    
     monitor(opt.intent, opt.project, opt.dispatch, opt.verbose)
