@@ -22,9 +22,9 @@ import os
 import json
 import time
 import logging
+import argparse
 import asyncore
 import datetime
-from optparse import OptionParser
 from collections import namedtuple
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -174,7 +174,8 @@ class FRBController(object):
             
 
 def monitor(intent, project, dispatch, verbose):
-    """ Monitor of mcaf observation files. 
+    """
+    Monitor of mcaf observation files.
     Scans that match intent and project are searched (unless --dispatch).
     Blocking function.
     """
@@ -207,27 +208,20 @@ def monitor(intent, project, dispatch, verbose):
         logger.info('Escaping mcaf_monitor')
 
 
-#@click.command()
-#@click.option('--intent', '-i', default='', help='Intent to trigger on')
-#@click.option('--project', '-p', default='', help='Project name to trigger on')
-#@click.option('--dispatch/--do', '-l', help='Only dispatch to multicast or actually do work?', default=True)
-#@click.option('--verbose', '-v', help='More verbose output', is_flag=True)
 if __name__ == '__main__':
     # This starts the receiving/handling loop
-
-    cmdline = OptionParser()
-    cmdline.add_option('-i', '--intent', dest="intent",
-        action="store", default="",
-        help="[] Trigger on what intent substring?")
-    cmdline.add_option('-p', '--project', dest="project",
-        action="store", default="",
-        help="[] Trigger on what project substring?")
-    cmdline.add_option('-d', '--dispatch', dest="dispatch",
-        action="store_true", default=False,
-        help="[False] Actually run dispatcher; don't just listen to multicast.") 
-    cmdline.add_option('-v', '--verbose', dest="verbose",
-        action="store_true", default=False,
-        help="[False] Verbose output")
-    (opt,args) = cmdline.parse_args()
+    parser = argparse.ArgumentParser(
+        description='Read the MCAF stream from the VLA and send position and timing commands to experiments who wish to coordinate observing with the VLA',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument('-i', '--intent', type=str, default='',
+                        help='Trigger on what intent substring?')
+    parser.add_argument('-p', '--project', type=str, default='',
+                        help='Trigger on what project substring?')
+    parser.add_argument('-d', '--dispatch', action='store_true',
+                        help='Actually run dispatcher; don't just listen to multicast') 
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='verbose output')
+    args = parser.parse_args()
     
-    monitor(opt.intent, opt.project, opt.dispatch, opt.verbose)
+    monitor(args.intent, args.project, args.dispatch, args.verbose)
