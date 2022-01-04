@@ -38,7 +38,6 @@ import mcaf_library
 workdir = os.getcwd() # assuming we start in workdir
 dispatched = {}       # Keep global list of dispatched commands
 last_scan = {}
-MJD_OFFSET = 2400000.5 # Offset in days between standard Julian day and MJD
 
 
 ScanInfo = namedtuple('ScanInfo', ['time', 'ra', 'dec', 'intent', 'id', 'source'])
@@ -76,7 +75,7 @@ class FRBController(object):
                     eventTime = last_scan[config.projectID].time
                     eventRA   = last_scan[config.projectID].ra
                     eventDec  = last_scan[config.projectID].dec
-                    eventDur  = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET) - eventTime  - 30.0 # subtract expected delay 
+                    eventDur  = config.startTime_unix - eventTime  - 30.0 # subtract expected delay 
                     eventIntent = last_scan[config.projectID].intent
                     eventID   = last_scan[config.projectID].id
                     if eventDur >= 0:
@@ -91,7 +90,7 @@ class FRBController(object):
                     logger.info("*** Project %s has finished (source=%s)" % (config.projectID,
                                                                              config.source))
                     eventType = 'ELWA_DONE'
-                    eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
+                    eventTime = config.startTime_unix
                     eventRA = -1
                     eventDec = -1
                     eventDur = -1
@@ -102,7 +101,7 @@ class FRBController(object):
             elif config.scan == 1:
                 logger.info("*** First scan %d (%s, %s)." % (config.scan, config.scan_intent, config.projectID))
                 eventType = 'ELWA_READY'
-                eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
+                eventTime = config.startTime_unix
                 eventRA = -1
                 eventDec = -1
                 eventDur = -1
@@ -114,7 +113,7 @@ class FRBController(object):
                 logger.info("*** Project %s has finished (source=%s)" % (config.projectID,
                                                                          config.source))
                 eventType = 'ELWA_DONE'
-                eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
+                eventTime = config.startTime_unix
                 eventRA = -1
                 eventDec = -1
                 eventDur = -1
@@ -158,7 +157,7 @@ class FRBController(object):
             logger.info("Done, wrote %i bytes.\n" % os.path.getsize(self.command_file))
             
         # add or update last scan
-        eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
+        eventTime = config.startTime_unix
         eventRA   = config.ra_deg
         eventDec  = config.dec_deg
         eventIntent = config.scan_intent
@@ -183,7 +182,7 @@ class FRBController(object):
                                                                                                       config.ra_str,
                                                                                                       config.dec_str,
                                                                                                       str(config.startTime),
-                                                                                                      str(mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET))))
+                                                                                                      str(config.startTime_unix)))
             
 
 def monitor(intent, project, dispatch, command_file, verbose):
