@@ -178,11 +178,11 @@ class FRBController(object):
                                                                                 config.scan_intent,
                                                                                 config.projectID,
                                                                                 self.project))
-            logger.info("*** Position of source %s is (%s , %s) and start time (%s; unixtime %s)." % (config.source,
-                                                                                                      config.ra_str,
-                                                                                                      config.dec_str,
-                                                                                                      str(config.startTime),
-                                                                                                      str(config.startTime_unix)))
+            logger.info("*** Position of source %s is (%s, %s) and start time (%s; unixtime %s)." % (config.source,
+                                                                                                     config.ra_str,
+                                                                                                     config.dec_str,
+                                                                                                     str(config.startTime),
+                                                                                                     str(config.startTime_unix)))
             
 
 def monitor(intent, project, dispatch, command_file, verbose):
