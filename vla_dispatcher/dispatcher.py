@@ -205,7 +205,7 @@ def monitor(intent, project, dispatch, verbose):
         asyncore.loop()
     except KeyboardInterrupt:
         # Just exit without the trace barf
-        logger.info('Escaping mcaf_monitor')
+        logger.info('Escaping monitor')
 
 
 if __name__ == '__main__':
@@ -223,5 +223,4 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='verbose output')
     args = parser.parse_args()
-    
     monitor(args.intent, args.project, args.dispatch, args.verbose)
