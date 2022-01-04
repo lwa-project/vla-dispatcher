@@ -62,7 +62,7 @@ class FRBController(object):
         if self.project == '' or self.project == config.projectID:
             try:
                 logger.info(last_scan[config.projectID])
-            except:
+            except KeyError:
                 logger.info(config.projectID)
                 
             do_dispatch = False
@@ -98,6 +98,14 @@ class FRBController(object):
             elif config.source == "FINISH" and last_scan[config.projectID].source == "FINISH":
                 logger.info("*** Project %s has finished (source=%s)" % (config.projectID,
                                                                          config.source))
+                eventType = 'ELWA_DONE'
+                eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
+                eventRA = -1
+                eventDec = -1
+                eventDur = -1
+                eventIntent = config.scan_intent
+                eventID = int(strftime("%y%m%d%H%M",gmtime()))
+                do_dispatch = True
                 
             else:
                 logger.info("*** Skipping scan no intent match: %d (%s, %s)!" % (config.scan,
