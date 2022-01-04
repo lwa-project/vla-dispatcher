@@ -25,6 +25,7 @@ import asyncore
 import logging
 from time import gmtime,strftime
 from optparse import OptionParser
+from collections import namedtuple
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -38,17 +39,22 @@ last_scan = {}
 MJD_OFFSET = 2400000.5 # Offset in days between standard Julian day and MJD
 
 
-class FRBController(object):
-    """Listens for OBS packets and tells FRB processing about any
-    notable scans."""
+ScanInfo = namedtuple('ScanInfo', ['time', 'ra', 'dec', 'intent', 'id', 'source'])
 
+
+class FRBController(object):
+    """
+    Listens for OBS packets and tells FRB processing about any
+    notable scans.
+    """
+    
     def __init__(self, intent='', project='', dispatch=False, verbose=False):
         # Mode can be project, intent
         self.intent = intent
         self.project = project
         self.dispatch = dispatch
         self.verbose = verbose
-
+        
     def add_obsdoc(self, obsdoc):
         config = mcaf_library.MCAST_Config(obsdoc=obsdoc)
 
@@ -61,41 +67,47 @@ class FRBController(object):
                 
             do_dispatch = False
             # check that we have already scan information in last_scan
-            if (config.projectID in list(last_scan.keys())):
-                if self.intent in last_scan[config.projectID][3]:
+            if config.projectID in list(last_scan.keys()):
+                if self.intent == last_scan[config.projectID].intent:
                     eventType = 'ELWA_SESSION'
-                    eventTime = last_scan[config.projectID][0]
-                    eventRA   = last_scan[config.projectID][1]
-                    eventDec  = last_scan[config.projectID][2]
+                    eventTime = last_scan[config.projectID].time
+                    eventRA   = last_scan[config.projectID].ra
+                    eventDec  = last_scan[config.projectID].dec
                     eventDur  = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET) - eventTime  - 30.0 # subtract expected delay 
-                    eventIntent = last_scan[config.projectID][3]
-                    eventSN   = last_scan[config.projectID][4]
-                    if eventDur>=0:
+                    eventIntent = last_scan[config.projectID].intent
+                    eventID   = last_scan[config.projectID].id
+                    if eventDur >= 0:
                         do_dispatch = True
-                        logger.info("Will dispatch %s for position %s %s" % (config.projectID,eventRA,eventDec))
+                        logger.info("Will dispatch %s for position %s %s" % (config.projectID,
+                                                                             eventRA,
+                                                                             eventDec))
                     else:
                         logger.info("Duration: %s" % eventDur)
                         
             elif config.scan == 1:
-                logger.info("*** First scan %d (%s, %s)." % (config.scan, config.scan_intent,config.projectID))
+                logger.info("*** First scan %d (%s, %s)." % (config.scan, config.scan_intent, config.projectID))
                 eventType = 'ELWA_READY'
                 eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
                 eventRA = -1
                 eventDec = -1
                 eventDur = -1
                 eventIntent = config.scan_intent
-                eventSN = int(strftime("%y%m%d%H%M",gmtime()))
+                eventID = int(strftime("%y%m%d%H%M",gmtime()))
                 do_dispatch = True
 
-            elif config.source in "FINISH" and last_scan[config.projectID][5] in "FINISH":
-                logger.info("*** Project %s has finished (source=%s)" % (config.projectID,config.source))
-
+            elif config.source == "FINISH" and last_scan[config.projectID].source == "FINISH":
+                logger.info("*** Project %s has finished (source=%s)" % (config.projectID,
+                                                                         config.source))
+                
             else:
-                logger.info("*** Skipping scan no intent match: %d (%s, %s)!" % (config.scan, config.scan_intent,config.projectID))
-              
-
+                logger.info("*** Skipping scan no intent match: %d (%s, %s)!" % (config.scan,
+                                                                                 config.scan_intent,
+                                                                                 config.projectID))
+                
         else:
-            logger.info("*** Skipping scan no project match: %d (%s, %s)." % (config.scan, config.scan_intent,config.projectID))
+            logger.info("*** Skipping scan no project match: %d (%s, %s)." % (config.scan,
+                                                                              config.scan_intent,
+                                                                              config.projectID))
             
         if self.dispatch and do_dispatch:
             # Wait until last command disappears (i.e. cmd file is deleted by server)
@@ -107,11 +119,11 @@ class FRBController(object):
                 
             # Enqueue command
             if eventDur > 0:
-                logger.info("Dispatching SESSION command for obs serial# %s." % eventSN)
+                logger.info("Dispatching SESSION command for obs serial# %s." % eventID)
             else:
-                logger.info("Dispatching READY command for obs serial# %s." % eventSN)
+                logger.info("Dispatching READY command for obs serial# %s." % eventID)
             with open(cmdfile, 'w') as fh:
-                fh.write("%s %i %f %f %f %f" % (eventType, eventSN, eventTime, eventRA, eventDec, eventDur))
+                fh.write("%s %i %f %f %f %f" % (eventType, eventID, eventTime, eventRA, eventDec, eventDur))
             logger.info("Done, wrote %i bytes.\n" % os.path.getsize(cmdfile))
             
         # add or update last scan
@@ -119,17 +131,28 @@ class FRBController(object):
         eventRA   = config.ra_deg
         eventDec  = config.dec_deg
         eventIntent = config.scan_intent
-        eventSN = int(strftime("%y%m%d%H%M", gmtime()))
+        eventID = int(strftime("%y%m%d%H%M", gmtime()))
         eventSource = config.source
-        last_scan[config.projectID] = (eventTime, eventRA, eventDec, eventIntent, eventSN, eventSource)
-
+        last_scan[config.projectID] = ScanInfo(time=eventTime,
+                                               ra=eventRA, dec=eventDec,
+                                               intent=eventIntent,
+                                               id=eventID, source=eventSource)
+        
         if config.source == "FINISH":
-            logger.info("*** Project %s finish scan (source=%s)" % (config.projectID, config.source))
+            logger.info("*** Project %s finish scan (source=%s)" % (config.projectID,
+                                                                    config.source))
             # Remove last_scan information when observation finishes
             del last_scan[config.projectID]
         else:
-            logger.info("*** Scan %d (%s) contains desired project (%s=%s)." % (config.scan, config.scan_intent, config.projectID, self.project))
-            logger.info("*** Position of source %s is (%s , %s) and start time (%s; unixtime %s)." % (config.source,config.ra_str,config.dec_str,str(config.startTime),str(mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET))))
+            logger.info("*** Scan %d (%s) contains desired project (%s=%s)." % (config.scan,
+                                                                                config.scan_intent,
+                                                                                config.projectID,
+                                                                                self.project))
+            logger.info("*** Position of source %s is (%s , %s) and start time (%s; unixtime %s)." % (config.source,
+                                                                                                      config.ra_str,
+                                                                                                      config.dec_str,
+                                                                                                      str(config.startTime),
+                                                                                                      str(mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET))))
             
 
 def monitor(intent, project, dispatch, verbose):
@@ -166,10 +189,6 @@ def monitor(intent, project, dispatch, verbose):
         logger.info('Escaping mcaf_monitor')
 
 
-
-
-
-        
 #@click.command()
 #@click.option('--intent', '-i', default='', help='Intent to trigger on')
 #@click.option('--project', '-p', default='', help='Project name to trigger on')
