@@ -196,7 +196,7 @@ class MCAST_Config(object):
 
     @property
     def ra_str(self):
-        return angles.fmt_angle(self.ra_hrs, ":", ":").lstrip('+-')
+        return angles.fmt_angle(self.ra_hrs, ":", ":").lstrip('+-').rstrip()
 
     @property
     def dec_deg(self):
@@ -204,7 +204,7 @@ class MCAST_Config(object):
 
     @property
     def dec_str(self):
-        return angles.fmt_angle(self.dec_deg, ":", ":")
+        return angles.fmt_angle(self.dec_deg, ":", ":").rstrip()
 
     @property
     def startLST(self):
@@ -216,7 +216,11 @@ class MCAST_Config(object):
             return float(self.obsdoc.startTime)
         except AttributeError:
             return 0.0
-
+            
+    @property
+    def startTime_unix(self):
+        return utcjd_to_unix(self.startTime + MJD_OFFSET)
+        
     @property
     def wait_time_sec(self):
         if self.startTime==0.0:
