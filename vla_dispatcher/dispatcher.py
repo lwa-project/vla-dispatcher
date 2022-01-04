@@ -8,6 +8,7 @@
 # Currently reads all info from the multicast OBSDOC
 #
 # Sarah Burke Spolaor Sep 2015
+# modified Frank Schinzel Jan 05 2017 to adapt for LWA-VLA
 #
 #
 """
@@ -33,6 +34,7 @@ import mcaf_library
 # GLOBAL VARIABLES
 workdir = os.getcwd() # assuming we start in workdir
 dispatched = {};      # Keep global list of dispatched commands
+last_scan = {};
 MJD_OFFSET = 2400000.5 # Offset in days between standard Julian day and MJD
 
 class FRBController(object):
@@ -49,84 +51,87 @@ class FRBController(object):
     def add_obsdoc(self, obsdoc):
         config = mcaf_library.MCAST_Config(obsdoc=obsdoc)
 
-        # If intent and project are good, print stuff.
-        if (self.intent in config.scan_intent or self.intent is "") and (self.project in config.projectID or self.project is ""):
-            if config.source in "FINISH":
-                logger.info("*** Project %s has finished (source=%s)" % (config.projectID,config.source))
-            else:
-                logger.info("*** Scan %d contains desired intent (%s=%s) and project (%s=%s)." % (config.scan, config.scan_intent,self.intent, config.projectID,self.project))
-                logger.info("*** Position of source %s is (%s , %s) and start time (%s; unixtime %s)." % (config.source,config.ra_str,config.dec_str,str(config.startTime),str(mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET))))
+	# Add last entry
+	if (self.project in config.projectID or self.project is ""):
 
-            # If we're not in listening mode, take action
-	    if self.dispatch:
+	  try:
+	    logger.info(last_scan[config.projectID])
+	  except:
+	    logger.info(config.projectID)
 
-                # Check whether obs has completed, obs is continuing, or obs is a new obs.
-                do_dispatch = False
-                if config.source in 'FINISH':
-                    if config.projectID in dispatched:
-                        # Set "finish" parameters.
-                        eventType = 'VLA_FRB_SESSION'
-                        eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
-                        eventRA   = config.ra_deg
-                        eventDec  = config.dec_deg
-                        eventDur  = -1. # To signify "stop obs" command.
-                        eventSN = int(dispatched[config.projectID][1])
-                        do_dispatch = True
-                        
-                        # Remove project from dispatched tracker and check for unresolved jobs.
-                        del dispatched[config.projectID]
-                        if len(dispatched) is not 0:
-                            logger.debug("Dispatched jobs remaining:" % '\n'.join(['%s %s' % (key, value) for (key, value) in dispatched.items()]))
-                    else:
-                        logger.debug("Finished SB is not in dispatched list.")
+	  do_dispatch = False
+	  # check that we have already scan information in last_scan
+	  if (config.projectID in list(last_scan.keys())):
+	    if self.intent in last_scan[config.projectID][3]:
+	      eventType = 'ELWA_SESSION'
+	      eventTime = last_scan[config.projectID][0]
+	      eventRA   = last_scan[config.projectID][1]
+	      eventDec  = last_scan[config.projectID][2]
+	      eventDur  = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET) - eventTime  - 30.0 # subtract expected delay 
+	      eventIntent = last_scan[config.projectID][3]
+	      eventSN   = last_scan[config.projectID][4]
+	      if eventDur>=0:
+		do_dispatch = True
+                logger.info("Will dispatch %s for position %s %s" % (config.projectID,eventRA,eventDec))
+	      else:
+		logger.info("Duration: %s" % eventDur)
 
-                elif ('TARGET' not in config.scan_intent):
-                    logger.info("This is not a target scan. Will take no action.")
-                elif (config.projectID in list(dispatched.keys())) and (config.source in dispatched[config.projectID]):
-                    logger.info("Project %s already dispatched for target %s" % (config.projectID, config.source))
-                else:
-                #!!! CHECK FOR FINAL MESSAGE; SHOULD WE SEND A STOP COMMAND? REMOVE FROM dispatched IF SENT.
-                    logger.info("Will dispatch %s for position %s %s" % (config.projectID,config.ra_str,config.dec_str))
-                    
-                    # Event serial number (eventSN) is UTC YYMMDDHHMM.
-                    # This convention will work up to and including the year 2021.
-                    eventType = 'VLA_FRB_SESSION'
-                    eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
-                    eventRA   = config.ra_deg
-                    eventDec  = config.dec_deg
-                    eventDur  = 10800. # In seconds. 1 hour + 5 minutes auto stop-obs. Positive number signifies "start obs" command"
-                    eventSN = int(strftime("%y%m%d%H%M",gmtime()))
-                    do_dispatch = True
+	    elif config.scan==1:
+	      logger.info("*** First scan %d (%s, %s)." % (config.scan, config.scan_intent,config.projectID))
+	      eventType = 'ELWA_READY'
+	      eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
+	      eventRA = -1
+	      eventDec = -1
+	      eventDur = -1
+	      eventIntent = config.scan_intent
+	      eventSN = int(strftime("%y%m%d%H%M",gmtime()))
+	      do_dispatch = True
 
-                    # Add dispatched project and target to dispatched tracker.
-                    dispatched[config.projectID] = (config.source,eventSN)
+	    elif config.source in "FINISH" and last_scan[config.projectID][5] in "FINISH":
+	      logger.info("*** Project %s has finished (source=%s)" % (config.projectID,config.source))
 
-                
-                # Is this a command we actually want to dispatch?
-                if do_dispatch:
-                    # Wait until last command disappears (i.e. cmd file is deleted by server)
-                    cmdfile = 'incoming.cmd'
-                    if os.path.exists(cmdfile):
-                        logger.info("Waiting for cmd queue to clear...")
-                    while os.path.exists(cmdfile):
-                        time.sleep(1)
+	    else:
+	      logger.info("*** Skipping scan no intent match: %d (%s, %s)!" % (config.scan, config.scan_intent,config.projectID))
+	      
 
-                    # Enqueue command
-                    if (eventDur>0):
-                        logger.info("Dispatching START command for obs serial# %s." % eventSN)
-                    else:
-                        logger.info("Dispatching STOP command for obs serial# %s." % eventSN)
-                    fh = open(cmdfile,'w')
-                    fh.write("%s %i %f %f %f %f" % (eventType, eventSN, eventTime, eventRA, eventDec, eventDur))
-                    fh.close()
-                    logger.info("Done, wrote %i bytes.\n" % os.path.getsize(cmdfile))
+	  else:
+	    logger.info("*** Skipping scan no project match: %d (%s, %s)." % (config.scan, config.scan_intent,config.projectID))
+	    
 
-                
-        else:
-            logger.info("*** Skipping scan %d (%s, %s)." % (config.scan, config.scan_intent,config.projectID))
-            #logger.info("*** Position is (%s , %s) and start time (%s; LST %s).\n" % (config.ra_str,config.dec_str,str(config.startTime),str(config.startLST)))
+	  if self.dispatch and do_dispatch:
+	    # Wait until last command disappears (i.e. cmd file is deleted by server)
+	    cmdfile = 'incoming.cmd'
+	    if os.path.exists(cmdfile):
+	      logger.info("Waiting for cmd queue to clear...")
+	    while os.path.exists(cmdfile):
+	      time.sleep(1)
 
+	      # Enqueue command
+	    if (eventDur>0):
+		logger.info("Dispatching SESSION command for obs serial# %s." % eventSN)
+	    else:
+		logger.info("Dispatching READY command for obs serial# %s." % eventSN)
+	    fh = open(cmdfile,'w')
+	    fh.write("%s %i %f %f %f %f" % (eventType, eventSN, eventTime, eventRA, eventDec, eventDur))
+	    fh.close()
+	    logger.info("Done, wrote %i bytes.\n" % os.path.getsize(cmdfile))
 
+	  # add or update last scan
+	  eventTime = mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET)
+	  eventRA   = config.ra_deg
+	  eventDec  = config.dec_deg
+	  eventIntent = config.scan_intent
+	  eventSN = int(strftime("%y%m%d%H%M",gmtime()))
+	  eventSource = config.source
+	  last_scan[config.projectID] = (eventTime,eventRA,eventDec,eventIntent,eventSN,eventSource)
+
+          if config.source in "FINISH":
+            logger.info("*** Project %s finish scan (source=%s)" % (config.projectID,config.source))
+            # Remove last_scan information when observation finishes
+            del last_scan[config.projectID]
+          else:
+            logger.info("*** Scan %d (%s) contains desired project (%s=%s)." % (config.scan, config.scan_intent, config.projectID, self.project))
+            logger.info("*** Position of source %s is (%s , %s) and start time (%s; unixtime %s)." % (config.source,config.ra_str,config.dec_str,str(config.startTime),str(mcaf_library.utcjd_to_unix(config.startTime+MJD_OFFSET))))
 
             
 
