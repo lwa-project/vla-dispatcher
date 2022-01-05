@@ -143,7 +143,7 @@ class FRBController(object):
                 logger.info("Dispatching SESSION command for obs serial# %s." % eventID)
             else:
                 logger.info("Dispatching READY/DONE command for obs serial# %s." % eventID)
-            with open(self.command_file, 'wb') as fh:
+            with open(self.command_file, 'w') as fh:
                 json.dump({'notice_type':    eventType,
                            'event_id':       eventID,
                            'project_id':     config.projectID,
