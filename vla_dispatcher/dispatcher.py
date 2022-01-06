@@ -158,7 +158,7 @@ class FRBController(object):
                            'event_ra':       eventRA,
                            'event_dec':      eventDec,
                            'event_duration': eventDur,
-                           'event_url':      eventURL}, fh)
+                           'config_url':     eventURL}, fh)
             logger.info("Done, wrote %i bytes.\n" % os.path.getsize(self.command_file))
             
         # add or update last scan
