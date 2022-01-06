@@ -78,6 +78,7 @@ class FRBController(object):
                     eventDur  = config.startTime_unix - eventTime  - 30.0 # subtract expected delay 
                     eventIntent = last_scan[config.projectID].intent
                     eventID   = last_scan[config.projectID].id
+                    eventURL  = config.obsdoc.configUrl
                     if eventDur >= 0:
                         do_dispatch = True
                         logger.info("Will dispatch %s for position %s %s" % (config.projectID,
@@ -96,6 +97,7 @@ class FRBController(object):
                     eventDur = -1
                     eventIntent = config.scan_intent
                     eventID = int(time.strftime("%y%m%d%H%M", time.gmtime()))
+                    eventURL  = config.obsdoc.configUrl
                     do_dispatch = True
                     
             elif config.scan == 1:
@@ -107,6 +109,7 @@ class FRBController(object):
                 eventDur = -1
                 eventIntent = config.scan_intent
                 eventID = int(time.strftime("%y%m%d%H%M", time.gmtime()))
+                eventURL  = config.obsdoc.configUrl
                 do_dispatch = True
                 
             elif config.source == "FINISH":
@@ -119,6 +122,7 @@ class FRBController(object):
                 eventDur = -1
                 eventIntent = config.scan_intent
                 eventID = int(time.strftime("%y%m%d%H%M", time.gmtime()))
+                eventURL  = config.obsdoc.configUrl
                 do_dispatch = True
                 
             else:
@@ -153,7 +157,8 @@ class FRBController(object):
                            'event_source':   config.source,
                            'event_ra':       eventRA,
                            'event_dec':      eventDec,
-                           'event_duration': eventDur}, fh)
+                           'event_duration': eventDur,
+                           'event_url':      eventURL}, fh)
             logger.info("Done, wrote %i bytes.\n" % os.path.getsize(self.command_file))
             
         # add or update last scan
