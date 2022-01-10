@@ -1,0 +1,87 @@
+#!/bin/bash
+
+### BEGIN INIT INFO
+# Provides:        vla-dispatcher
+# Required-Start:  $network
+# Required-Stop:   none
+# Default-Start:   2 3 4 5
+# Default-Stop:    0 1 6
+# Short-Description: Start the vla dispatcher
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+SERVICE_NAME='vla-dispatcher'
+EXEC_PATH='/home/op1/eLWA/vla-dispatcher/vla_dispatcher'
+EXEC_OPTS='-c /home/op1/eLWA/incoming.json -d -i OBSERVE_PULSAR_RAW'
+
+check_self() {
+	output=`service $SERVICE_NAME status`
+	if [ "$?" == "0" ]; then
+		log_action_msg "$SERVICE_NAME appears to be running" || true
+		exit 0
+	fi
+}
+
+start() {
+	log_daemon_msg "Starting VLA Dispatcher"
+	logfile=`tempfile -p smart-copy-`
+	if su op1 -c "cd $EXEC_PATH && screen -d -m -S VLADispatcher ./dispatcher.py $EXEC_OPTS" > $logfile 2>&1; then
+		log_end_msg 0 || true
+	else
+		log_end_msg 1 || true
+		cat $logfile
+	fi
+	rm -f $logfile
+}
+
+stop() {
+	log_daemon_msg "Stopping VLA Dispatcher"
+	logfile=`tempfile -p smart-copy-`
+	if su op1 -c "ps aux | grep 'dispatcher.py' | grep -v grep | grep -v -i screen | awk '{print \$2}' | xargs kill" > $logfile 2>&1; then
+		log_end_msg 0 || true
+	else
+		log_end_msg 1 || true
+		cat $logfile
+	fi
+	rm -f $logfile
+}
+
+status() {
+	output=`ps aux | grep "dispatcher.py" | grep -v grep | grep -v -i screen`
+	if [ "$output" != "" ]; then
+		procs=`echo "$output" | awk '{print $2}' | sed -e ':a;{N;s/\n/ /;ba}' `
+		echo "$SERVICE_NAME start/running, process $procs"
+	else
+		echo "not running"
+	fi
+}
+
+wait_socket_clear() {
+	log_daemon_msg "Waiting 60s for sockets to clear"
+	sleep 60
+	log_end_msg 0 || true
+}
+
+case "$1" in
+	start)
+		check_self
+		start
+		;;
+	stop)
+		stop
+		;;
+	status)
+		status
+		;;
+	restart|reload)
+		stop
+		wait_socket_clear
+		start
+		;;
+	*)
+		echo $"Usage $0 {start|stop|restart|reload|status}"
+		exit 1
+esac
+
+exit 0
