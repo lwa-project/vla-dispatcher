@@ -194,13 +194,14 @@ def monitor(intent, project, dispatch, command_file, verbose):
     logger.info('* * * * * * * * * * * * * * * * * * * * *')
     logger.info('* * * VLA Dispatcher is now running * * *')
     logger.info('* * * * * * * * * * * * * * * * * * * * *')
-    logger.info('*   Looking for intent = %s, project = %s' % (intent, project))
+    logger.info('*   Looking for intent = \'%s\'', intent)
+    logger.info('*               project = \'%s\'',  project)
     logger.debug('*   Running in verbose mode')
     if dispatch:
         logger.info('*   Running in dispatch mode. Will dispatch obs commands.')
     else:
         logger.info('*   Running in listening mode. Will not dispatch obs commands.')
-    logger.info('* * * * * * * * * * * * * * * * * * * * *\n')
+    logger.info('* * * * * * * * * * * * * * * * * * * * *')
     
     # This starts the receiving/handling loop
     controller = FRBController(intent=intent, project=project, dispatch=dispatch,
