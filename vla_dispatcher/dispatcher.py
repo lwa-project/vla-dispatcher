@@ -87,6 +87,18 @@ class FRBController(object):
                     else:
                         logger.info("Duration: %s" % eventDur)
                         
+                elif config.scan == 1:
+                    logger.info("*** First scan %d (%s, %s)." % (config.scan, config.scan_intent, config.projectID))
+                    eventType = 'ELWA_READY'
+                    eventTime = config.startTime_unix
+                    eventRA = -1
+                    eventDec = -1
+                    eventDur = -1
+                    eventIntent = config.scan_intent
+                    eventID = int(time.strftime("%y%m%d%H%M", time.gmtime()))
+                    eventURL  = config.obsdoc.configUrl
+                    do_dispatch = True
+                    
                 elif config.source == "FINISH":
                     logger.info("*** Project %s has finished (source=%s)" % (config.projectID,
                                                                              config.source))
@@ -100,94 +112,69 @@ class FRBController(object):
                     eventURL  = config.obsdoc.configUrl
                     do_dispatch = True
                     
-            elif config.scan == 1:
-                logger.info("*** First scan %d (%s, %s)." % (config.scan, config.scan_intent, config.projectID))
-                eventType = 'ELWA_READY'
-                eventTime = config.startTime_unix
-                eventRA = -1
-                eventDec = -1
-                eventDur = -1
-                eventIntent = config.scan_intent
-                eventID = int(time.strftime("%y%m%d%H%M", time.gmtime()))
-                eventURL  = config.obsdoc.configUrl
-                do_dispatch = True
-                
-            elif config.source == "FINISH":
-                logger.info("*** Project %s has finished (source=%s)" % (config.projectID,
-                                                                         config.source))
-                eventType = 'ELWA_DONE'
-                eventTime = config.startTime_unix
-                eventRA = -1
-                eventDec = -1
-                eventDur = -1
-                eventIntent = config.scan_intent
-                eventID = int(time.strftime("%y%m%d%H%M", time.gmtime()))
-                eventURL  = config.obsdoc.configUrl
-                do_dispatch = True
+                else:
+                    logger.info("*** Skipping scan no intent match: %d (%s, %s)!" % (config.scan,
+                                                                                     config.scan_intent,
+                                                                                     config.projectID))
                 
             else:
-                logger.info("*** Skipping scan no intent match: %d (%s, %s)!" % (config.scan,
-                                                                                 config.scan_intent,
-                                                                                 config.projectID))
+                logger.info("*** Skipping scan no project match: %d (%s, %s)." % (config.scan,
+                                                                                  config.scan_intent,
+                                                                                  config.projectID))
                 
-        else:
-            logger.info("*** Skipping scan no project match: %d (%s, %s)." % (config.scan,
-                                                                              config.scan_intent,
-                                                                              config.projectID))
+            if self.dispatch and do_dispatch:
+                # Wait until last command disappears (i.e. cmd file is deleted by server)
+                if os.path.exists(self.command_file):
+                    logger.info("Waiting for cmd queue to clear...")
+                while os.path.exists(self.command_file):
+                    time.sleep(1)
+                    
+                # Enqueue command
+                if eventDur > 0:
+                    logger.info("Dispatching SESSION command for obs serial# %s." % eventID)
+                else:
+                    logger.info("Dispatching READY/DONE command for obs serial# %s." % eventID)
+                with open(self.command_file, 'w') as fh:
+                    json.dump({'notice_type':    eventType,
+                               'event_id':       eventID,
+                               'project_id':     config.projectID,
+                               'scan_id':        config.scan,
+                               'scan_intent':    eventIntent,
+                               'event_t':        eventTime,
+                               'event_source':   config.source,
+                               'event_ra':       eventRA,
+                               'event_dec':      eventDec,
+                               'event_duration': eventDur,
+                               'config_url':     eventURL}, fh)
+                logger.info("Done, wrote %i bytes.\n" % os.path.getsize(self.command_file))
+                
+            # add or update last scan
+            eventTime = config.startTime_unix
+            eventRA   = config.ra_deg
+            eventDec  = config.dec_deg
+            eventIntent = config.scan_intent
+            eventID = int(time.strftime("%y%m%d%H%M", time.gmtime()))
+            eventSource = config.source
+            last_scan[config.projectID] = ScanInfo(time=eventTime,
+                                                   ra=eventRA, dec=eventDec,
+                                                   intent=eventIntent,
+                                                   id=eventID, source=eventSource)
             
-        if self.dispatch and do_dispatch:
-            # Wait until last command disappears (i.e. cmd file is deleted by server)
-            if os.path.exists(self.command_file):
-                logger.info("Waiting for cmd queue to clear...")
-            while os.path.exists(self.command_file):
-                time.sleep(1)
-                
-            # Enqueue command
-            if eventDur > 0:
-                logger.info("Dispatching SESSION command for obs serial# %s." % eventID)
+            if config.source == "FINISH":
+                logger.info("*** Project %s finish scan (source=%s)" % (config.projectID,
+                                                                        config.source))
+                # Remove last_scan information when observation finishes
+                del last_scan[config.projectID]
             else:
-                logger.info("Dispatching READY/DONE command for obs serial# %s." % eventID)
-            with open(self.command_file, 'w') as fh:
-                json.dump({'notice_type':    eventType,
-                           'event_id':       eventID,
-                           'project_id':     config.projectID,
-                           'scan_id':        config.scan,
-                           'scan_intent':    eventIntent,
-                           'event_t':        eventTime,
-                           'event_source':   config.source,
-                           'event_ra':       eventRA,
-                           'event_dec':      eventDec,
-                           'event_duration': eventDur,
-                           'config_url':     eventURL}, fh)
-            logger.info("Done, wrote %i bytes.\n" % os.path.getsize(self.command_file))
-            
-        # add or update last scan
-        eventTime = config.startTime_unix
-        eventRA   = config.ra_deg
-        eventDec  = config.dec_deg
-        eventIntent = config.scan_intent
-        eventID = int(time.strftime("%y%m%d%H%M", time.gmtime()))
-        eventSource = config.source
-        last_scan[config.projectID] = ScanInfo(time=eventTime,
-                                               ra=eventRA, dec=eventDec,
-                                               intent=eventIntent,
-                                               id=eventID, source=eventSource)
-        
-        if config.source == "FINISH":
-            logger.info("*** Project %s finish scan (source=%s)" % (config.projectID,
-                                                                    config.source))
-            # Remove last_scan information when observation finishes
-            del last_scan[config.projectID]
-        else:
-            logger.info("*** Scan %d (%s) contains desired project (%s=%s)." % (config.scan,
-                                                                                config.scan_intent,
-                                                                                config.projectID,
-                                                                                self.project))
-            logger.info("*** Position of source %s is (%s, %s) and start time (%s; unixtime %s)." % (config.source,
-                                                                                                     config.ra_str,
-                                                                                                     config.dec_str,
-                                                                                                     str(config.startTime),
-                                                                                                     str(config.startTime_unix)))
+                logger.info("*** Scan %d (%s) contains desired project (%s=%s)." % (config.scan,
+                                                                                    config.scan_intent,
+                                                                                    config.projectID,
+                                                                                    self.project))
+                logger.info("*** Position of source %s is (%s, %s) and start time (%s; unixtime %s)." % (config.source,
+                                                                                                         config.ra_str,
+                                                                                                         config.dec_str,
+                                                                                                         str(config.startTime),
+                                                                                                         str(config.startTime_unix)))
             
 
 def monitor(intent, project, dispatch, command_file, verbose):
