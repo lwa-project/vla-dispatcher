@@ -95,7 +95,7 @@ class FRBController(object):
                     eventDec = -1
                     eventDur = -1
                     eventIntent = config.scan_intent
-                    eventID = int(time.strftime("%m%d%H%M", time.gmtime()))
+                    eventID = int(time.strftime("%m%d%H%M", time.gmtime()), 10)
                     eventURL  = config.obsdoc.configUrl
                     do_dispatch = True
                     
@@ -108,7 +108,7 @@ class FRBController(object):
                     eventDec = -1
                     eventDur = -1
                     eventIntent = config.scan_intent
-                    eventID = int(time.strftime("%m%d%H%M", time.gmtime()))
+                    eventID = int(time.strftime("%m%d%H%M", time.gmtime()), 10)
                     eventURL  = config.obsdoc.configUrl
                     do_dispatch = True
                     
@@ -153,7 +153,7 @@ class FRBController(object):
             eventRA   = config.ra_deg
             eventDec  = config.dec_deg
             eventIntent = config.scan_intent
-            eventID = int(time.strftime("%m%d%H%M", time.gmtime()))
+            eventID = int(time.strftime("%m%d%H%M", time.gmtime()), 10)
             eventSource = config.source
             last_scan[config.projectID] = ScanInfo(time=eventTime,
                                                    ra=eventRA, dec=eventDec,
