@@ -1,0 +1,32 @@
+[Unit]
+Description=VLA dispatcher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=op1
+# Add a delay between stop and start in a restart to allows the sockets to clear
+Restart=always
+RestartSec=60
+
+# Have a safety net to kill off recalcitrant servers
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Logging
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=shl-mcs
+
+# Setup the environment
+Environment=PYTHONUNBUFFERED=1
+
+ExecStart=/bin/bash -ec '\
+cd /home/op1/eLWA/vla-dispatcher/vla_dispatcher && \
+python3 dispatcher.py \
+         --command-file /home/op1/eLWA/incoming.json \
+				 --intent OBSERVE_PULSAR_RAW \
+				 --dispatch'
+
+[Install]
+WantedBy=multi-user.target
